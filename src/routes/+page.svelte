@@ -1,24 +1,26 @@
 <script lang="ts">
 	import { CorneaDate } from '$lib';
-	import { text } from '@sveltejs/kit'; 
-    import '../default.scss';
+	import { trpc } from '$lib/trpc/client';
+	import '../default.scss';
+	import Edito from './Edito.svelte';
 
 	let day = $state(1);
-	let numberOfDays = $state(10); 
-    let selectedDay :undefined|number= $state();
+	let numberOfDays = $state(10);
+	let selectedDay: undefined | number = $state();
 
-	let data:Record<number,string> = $state({});
+	const client = trpc();
 
+	let data: Record<number, string> = $state({});
 
-    let selectedDate = $derived(selectedDay!=undefined?CorneaDate.fromEpoch(selectedDay):undefined)
+	let selectedDate = $derived(
+		selectedDay != undefined ? CorneaDate.fromEpoch(selectedDay) : undefined
+	);
 	let now = $derived(CorneaDate.fromEpoch(day));
 
-
-	async function updateData(day:number, text:string) {
-		
-	}
-
+	async function updateData(day: number, text: string) {}
 </script>
+
+<Edito {client} path={'2'} />
 
 <label>
 	Current day
@@ -30,16 +32,14 @@
 	<input type="number" bind:value={numberOfDays} />
 </label>
 
-<dialog open={selectedDay!=undefined}>
-<article>
-    <header>
-        <button aria-label="Close" rel="prev" onclick={()=>selectedDay=undefined}></button>
-        <strong>{selectedDate}</strong>
-    </header>
-    <textarea>
-
-    </textarea>
-</article>
+<dialog open={selectedDay != undefined}>
+	<article>
+		<header>
+			<button aria-label="Close" rel="prev" onclick={() => (selectedDay = undefined)}></button>
+			<strong>{selectedDate}</strong>
+		</header>
+		<textarea> </textarea>
+	</article>
 </dialog>
 
 <p>
@@ -57,8 +57,8 @@
 		{@const dayFiledHeight = 20}
 		{@const dayStartRadius = 200}
 
-        {@const outerRingStart = dayStartRadius + 5 * dayFiledHeight}
-			{@const outerRingEnd = outerRingStart + 50}
+		{@const outerRingStart = dayStartRadius + 5 * dayFiledHeight}
+		{@const outerRingEnd = outerRingStart + 50}
 
 		{@const segment = Math.floor(i / 30) % 20}
 		{@const subSegment = i % 6}
@@ -83,7 +83,13 @@
 		{@const x4 = centerX + ringStartRadius * Math.cos(semnetStartAngle + subsegmentEndAngle)}
 		{@const y4 = centerY + ringStartRadius * Math.sin(semnetStartAngle + subsegmentEndAngle)}
 
-			<path class="dayfield" class:selected={currnetDate.daysSinceEpoch==now.daysSinceEpoch} d="M {x1} {y1} L {x2} {y2} L {x3} {y3} L {x4} {y4} Z" onclick={()=>selectedDay=currnetDate.daysSinceEpoch}  stroke-width="0.5" />
+		<path
+			class="dayfield"
+			class:selected={currnetDate.daysSinceEpoch == now.daysSinceEpoch}
+			d="M {x1} {y1} L {x2} {y2} L {x3} {y3} L {x4} {y4} Z"
+			onclick={() => (selectedDay = currnetDate.daysSinceEpoch)}
+			stroke-width="0.5"
+		/>
 		<!-- Text in the middel and tilt it acordenly -->
 		<text
 			font-size="5"
@@ -98,7 +104,6 @@
 		</text>
 
 		{#if currnetDate.day <= 6}
-			
 			{@const textRadius = outerRingStart + 10}
 
 			<!-- border of outer Text ring with weekdays  -->
@@ -116,7 +121,6 @@
 			<path
 				d="M {outerX1} {outerY1} L {outerX2} {outerY2} L {outerX3} {outerY3} L {outerX4} {outerY4} Z"
 				fill="none"
-				
 			/>
 
 			<text
@@ -151,18 +155,22 @@
 				fill="transparent"
 			/>
 
+			{@const lineX1 = centerX + outerRingEnd * Math.cos(semnetStartAngle)}
+			{@const lineY1 = centerY + outerRingEnd * Math.sin(semnetStartAngle)}
+			{@const lineX2 = centerX + moonYearStart * Math.cos(semnetStartAngle)}
+			{@const lineY2 = centerY + moonYearStart * Math.sin(semnetStartAngle)}
 
-            {@const lineX1 = centerX + outerRingEnd * Math.cos(semnetStartAngle)}
-            {@const lineY1 = centerY + outerRingEnd * Math.sin(semnetStartAngle)}
-            {@const lineX2 = centerX + moonYearStart * Math.cos(semnetStartAngle )}
-            {@const lineY2 = centerY + moonYearStart * Math.sin(semnetStartAngle )}
-
-            <path d="M {lineX1} {lineY1} L {lineX2} {lineY2}"   />
+			<path d="M {lineX1} {lineY1} L {lineX2} {lineY2}" />
 
 			<!-- <path d="M {outerX1} {outerY1} L {outerX2} {outerY2}"  /> -->
 
 			<text>
-				<textPath xlink:href="#curve2{i}" startOffset="50%" text-anchor="middle" alignment-baseline="middle">
+				<textPath
+					xlink:href="#curve2{i}"
+					startOffset="50%"
+					text-anchor="middle"
+					alignment-baseline="middle"
+				>
 					{currnetDate.monthName}
 				</textPath>
 			</text>
@@ -201,21 +209,24 @@
 					startOffset="50%"
 					text-anchor="middle"
 					alignment-baseline="middle"
-                    font-size="36"
+					font-size="36"
 				>
 					{currnetDate.moonYearName}
 				</textPath>
 			</text>
 		{/if}
 
-        {#if i==599}
-        <path d="M {centerX} {centerY+outerRingEnd} L {centerX} {centerY-outerRingEnd}"  stroke-width="2" />
-        <path d="M {centerX+outerRingEnd} {centerY} L {centerX-outerRingEnd} {centerY}"  stroke-width="2" />
-
-        {/if}
-
+		{#if i == 599}
+			<path
+				d="M {centerX} {centerY + outerRingEnd} L {centerX} {centerY - outerRingEnd}"
+				stroke-width="2"
+			/>
+			<path
+				d="M {centerX + outerRingEnd} {centerY} L {centerX - outerRingEnd} {centerY}"
+				stroke-width="2"
+			/>
+		{/if}
 	{/each}
-
 </svg>
 
 <table>
@@ -243,21 +254,21 @@
 </table>
 
 <style lang="scss">
-    svg{
-        stroke: var(--pico-color);
-    }
-    .dayfield{
-        fill: transparent;
-        cursor: pointer;
-    }
-    .dayfield:hover{
-        fill: lightblue;
-    }
+	svg {
+		stroke: var(--pico-color);
+	}
+	.dayfield {
+		fill: transparent;
+		cursor: pointer;
+	}
+	.dayfield:hover {
+		fill: lightblue;
+	}
 
-    .dayfield.selected{
-        fill: lightskyblue;
-    }
-    .dayfield.selected:hover{
-        fill: lightsteelblue;
-    }
+	.dayfield.selected {
+		fill: lightskyblue;
+	}
+	.dayfield.selected:hover {
+		fill: lightsteelblue;
+	}
 </style>
