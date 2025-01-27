@@ -377,7 +377,7 @@
 	.dayfield.selected {
 		fill: var(--pico-primary-background);
 	}
-	.dayfield.selected:hover {
+	g.daybox:hover >.dayfield.selected {
 		fill: var(--pico-primary-hover-background);
 	}
 	.selected {
