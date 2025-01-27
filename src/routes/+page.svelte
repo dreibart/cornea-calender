@@ -5,7 +5,7 @@
 	import '../default.scss';
 	import Edito from './Edito.svelte';
 	import 'quill/dist/quill.bubble.css';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 
 	let day = $state(1);
 	let month = $state(1);
@@ -13,22 +13,48 @@
 	let sunYear = $state(0);
 	let now = $derived(CorneaDate.from({ day, month, moonYear, sunYear }));
 	let epochDay = $derived(now.daysSinceEpoch);
+	let counterEpchDay: number | undefined;
 
 	let afterMount = $state(false);
 
+	const userId = Math.random().toString(36).substring(7);
+
+	let blockUpdate = $state(0);
+	let allowDayUpdate = $derived(blockUpdate == 0);
+
 	$effect(() => {
-		if (browser && afterMount) {
-			client.dayChange.mutate(epochDay);
-			// localStorage.setItem('day', epochDay.toString());
+		console.log('update', epochDay, counterEpchDay);
+		if (browser && counterEpchDay != undefined && counterEpchDay != epochDay) {
+			persistNewDay(epochDay, counterEpchDay);
 		}
 	});
 
+	async function persistNewDay(newDay: number, counterEpchDay: number) {
+		// if (allowDayUpdate) {
+		if (counterEpchDay == undefined) {
+			return;
+		}
+		const current = await client.dayChange.mutate({ day:newDay, user: userId, counter: counterEpchDay });
+		if (current.day != epochDay) {
+			setDate(current.day);
+		}
+		counterEpchDay = current.counter;
+
+		// }
+	}
+
 	function setDate(epochDay: number) {
 		const date = CorneaDate.fromEpoch(epochDay);
+		// blockUpdate++;
+		// try {
 		day = date.day;
 		month = date.month;
 		moonYear = date.moonYear;
 		sunYear = date.sunYear;
+		// } finally {
+		// 	blockUpdate--;
+		// }
+		// persistNewDay(epochDay);
 	}
 
 	let selectedDay: undefined | number = $state();
@@ -46,12 +72,27 @@
 
 	onMount(() => {
 		name = sessionStorage.getItem('name') ?? '';
-		client.dayListener.subscribe(undefined,{
-			onData(day) {
-				afterMount = true;
-				setDate(day);
+		client.dayListener.subscribe(undefined, {
+			onData({ day, user,counter }) {
+				if (user != userId) {
+					setDate(day);
+					counterEpchDay = counter;
+					// (async () => {
+					// 	blockUpdate++;
+					// 	try {
+					// 		await tick();
+					// 		await tick();
+					// 	} finally {
+					// 		blockUpdate--;
+					// 	}
+					// })();
+				}
+				
+				if (counterEpchDay == undefined) {
+					counterEpchDay = day;
+				}
 			}
-		})
+		});
 		client.changeLisener.subscribe(undefined, {
 			onData(input) {
 				if (Array.isArray(input)) {
@@ -342,9 +383,9 @@
 			/>
 
 			<text x={centerX} y={centerY} text-anchor="middle" alignment-baseline="middle" font-size="30">
-				<tspan x={centerX} dy="-0.5em">Sonnen</tspan>
-				<tspan x={centerX} dy="1em"> {currnetDate.sunYear}</tspan>
-				<tspan x={centerX} dy="1em">Jahr</tspan>
+				<tspan class="muted" x={centerX} dy="-0.5em">Sonnen</tspan>
+				<tspan class="selected" x={centerX} dy="1em"> {currnetDate.sunYear}</tspan>
+				<tspan class="muted" x={centerX} dy="1em">Jahr</tspan>
 			</text>
 		{/if}
 	{/each}
@@ -377,14 +418,15 @@
 	.dayfield.selected {
 		fill: var(--pico-primary-background);
 	}
-	g.daybox:hover >.dayfield.selected {
+	g.daybox:hover > .dayfield.selected {
 		fill: var(--pico-primary-hover-background);
 	}
 	.selected {
 		stroke: var(--pico-primary);
 	}
 	textPath.selected,
-	text.selected {
+	text.selected,
+	tspan.selected {
 		stroke: none;
 		fill: var(--pico-primary);
 	}
@@ -396,6 +438,9 @@
 			z-index: 100;
 			stroke: var(--pico-ins-color);
 		}
+	}
+	.muted {
+		fill: var(--pico-muted-color);
 	}
 
 	aside {

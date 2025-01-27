@@ -1,7 +1,7 @@
 import type { Context } from '$lib/trpc/context';
 import { initTRPC } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
-import { EventEmitter, on } from 'events';
+import { EventEmitter } from 'events';
 import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
@@ -82,20 +82,25 @@ class DataStore {
 
 class DayStore {
   private currentDay: number | undefined;
+  private counter = 0;
   private static readonly saveLocation = "currentDay";
   public static readonly instance: DayStore = new DayStore();
-
 
   private constructor() {
 
 
   }
 
-  public set day(day: number) {
+  public setDay(day: number, counter: number) {
+    if (counter !== this.counter) {
+      return this.day;
+    }
+    this.counter++;
     this.currentDay = day;
     fs.writeFileSync(DayStore.saveLocation, day.toString());
+    return this.day;
   }
-  public get day(): number {
+  public get day(): { day: number, counter: number } {
     if (this.currentDay === undefined) {
       if (fs.existsSync(DayStore.saveLocation)) {
         this.currentDay = parseInt(fs.readFileSync(DayStore.saveLocation, 'utf-8'));
@@ -105,7 +110,7 @@ class DayStore {
         this.currentDay = 0;
       }
     }
-    return this.currentDay;
+    return { day: this.currentDay, counter: this.counter };
   }
 }
 
@@ -189,22 +194,30 @@ export const router = t.router({
     });
   }),
   dayListener: t.procedure.subscription(() => {
-    return observable<number>((tooCurrentUser) => {
-      const onAdd = (day: number) => {
-        tooCurrentUser.next(day);
+    return observable<{ day: number, counter: number, user: string }>((tooCurrentUser) => {
+      const onAdd = (input: { day: number, counter: number, user: string }) => {
+        tooCurrentUser.next(input);
       };
       broadcast.on('day', onAdd);
-      tooCurrentUser.next(DayStore.instance.day);
+      tooCurrentUser.next({ user: 'api', ...DayStore.instance.day });
       return () => {
         broadcast.off('day', onAdd);
 
       };
     });
   }),
-  dayChange: t.procedure.input(z.number()).mutation(({ input }) => {
-    DayStore.instance.day = input;
-    broadcast.emit('day', input);
-    return { success: true };
+  dayChange: t.procedure.input(z.object({ day: z.number(), counter: z.number(), user: z.string() })).mutation(({ input }) => {
+    const { day: currentDay, counter: currentCounter } = DayStore.instance.day;
+    const user = input.user;
+    if (currentDay === input.day) {
+      return { user, day: currentDay, counter: currentCounter };
+    }
+    if (input.counter !== currentCounter) {
+      return { user, day: currentDay, counter: currentCounter };
+    }
+    const newDay = DayStore.instance.setDay(input.day, input.counter);
+    broadcast.emit('day', newDay);
+    return { user, ...newDay };
   }),
 });
 
