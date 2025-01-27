@@ -1,1 +1,16 @@
 @use "@picocss/pico" as *;
+
+
+.ql-bubble.ql-toolbar button, .ql-bubble .ql-toolbar button{
+    margin-bottom: unset;
+}
+
+.ql-editor.ql-blank::before{
+    color: var(--pico-muted-color)!important;
+}
+
+button.text{
+    background-color: transparent;
+    border: none;
+    text-decoration: underline;
+}

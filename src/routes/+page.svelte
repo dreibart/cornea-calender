@@ -1,58 +1,148 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { CorneaDate } from '$lib';
 	import { trpc } from '$lib/trpc/client';
 	import '../default.scss';
 	import Edito from './Edito.svelte';
+	import 'quill/dist/quill.bubble.css';
+	import { onMount } from 'svelte';
 
 	let day = $state(1);
-	let numberOfDays = $state(10);
+	let month = $state(1);
+	let moonYear = $state(1);
+	let sunYear = $state(0);
+	let now = $derived(CorneaDate.from({ day, month, moonYear, sunYear }));
+	let epochDay = $derived(now.daysSinceEpoch);
+
+	let afterMount = $state(false);
+
+	$effect(() => {
+		if (browser && afterMount) {
+			client.dayChange.mutate(epochDay);
+			// localStorage.setItem('day', epochDay.toString());
+		}
+	});
+
+	function setDate(epochDay: number) {
+		const date = CorneaDate.fromEpoch(epochDay);
+		day = date.day;
+		month = date.month;
+		moonYear = date.moonYear;
+		sunYear = date.sunYear;
+	}
+
 	let selectedDay: undefined | number = $state();
+	let name: string = $state('');
+	let changeName: string = $state('');
+	let editDialog: HTMLElement | undefined = $state();
 
 	const client = trpc();
 
-	let data: Record<number, string> = $state({});
+	let daysWithData: number[] = $state([]);
 
 	let selectedDate = $derived(
 		selectedDay != undefined ? CorneaDate.fromEpoch(selectedDay) : undefined
 	);
-	let now = $derived(CorneaDate.fromEpoch(day));
 
-	async function updateData(day: number, text: string) {}
+	onMount(() => {
+		name = sessionStorage.getItem('name') ?? '';
+		client.dayListener.subscribe(undefined,{
+			onData(day) {
+				afterMount = true;
+				setDate(day);
+			}
+		})
+		client.changeLisener.subscribe(undefined, {
+			onData(input) {
+				if (Array.isArray(input)) {
+					input.forEach((day) => {
+						daysWithData.push(day);
+					});
+				} else {
+					if (input.hasData) {
+						daysWithData.push(input.day);
+					} else {
+						daysWithData = daysWithData.filter((day) => day != input.day);
+					}
+				}
+			}
+		});
+	});
 </script>
 
-<Edito {client} path={'2'} />
-
-<label>
-	Current day
-	<input type="number" bind:value={day} />
-</label>
-
-<label>
-	Number of days
-	<input type="number" bind:value={numberOfDays} />
-</label>
-
+<!-- {#if selectedDate != undefined} -->
 <dialog open={selectedDay != undefined}>
-	<article>
+	<article bind:this={editDialog}>
 		<header>
 			<button aria-label="Close" rel="prev" onclick={() => (selectedDay = undefined)}></button>
-			<strong>{selectedDate}</strong>
+			<strong>{selectedDate}</strong><button
+				class="text"
+				role="link"
+				disabled={epochDay == selectedDay}
+				onclick={() => {
+					setDate(selectedDay!);
+				}}
+				>{#if epochDay == selectedDay}
+					Today
+				{:else}
+					As Now{/if}
+			</button>
 		</header>
-		<textarea> </textarea>
+		{#if selectedDay != undefined}
+			<Edito {client} day={selectedDay} {name} bounds={editDialog} />
+		{/if}
+	</article>
+</dialog>
+<!-- {:else} -->
+<h1>Cornea Kalender</h1>
+<aside>
+	<article style="padding-bottom: 0;">
+		<!-- <header>
+			Nutzer <strong>{name}</strong>
+		</header> -->
+
+		<div role="group">
+			<input type="number" bind:value={day} min="1" max="30" />
+			<select bind:value={month}>
+				{#each CorneaDate.monthNames as m, i}
+					<option value={i + 1}>{m}</option>
+				{/each}
+			</select>
+			<!-- <input type="number" bind:value={month} min="1" max="5" /> -->
+			<select bind:value={moonYear}>
+				{#each CorneaDate.moonYearNames as m, i}
+					<option value={i + 1}>{m}</option>
+				{/each}
+			</select>
+			<!-- <input type="number" bind:value={moonYear} min="1" max="4" /> -->
+			<input type="number" bind:value={sunYear} />
+		</div>
+	</article>
+</aside>
+
+<dialog open={name == ''}>
+	<article>
+		<header>
+			<strong>Enter your name</strong>
+		</header>
+		<input type="text" bind:value={changeName} />
+		<button
+			onclick={() => {
+				name = changeName?.trim();
+				sessionStorage.setItem('name', name);
+			}}>Save</button
+		>
 	</article>
 </dialog>
 
-<p>
-	Sonnenjahr {now.sunYear}
-</p>
-<svg style="width: 100vw; height: 100vh;" viewBox="0 0 800 800">
+<svg style="width: 100vw; height: 100vh; margin-top:1rem" viewBox="0 0 800 800">
 	<!-- draw a circle with 150 segments -->
 
 	{#each Array.from({ length: 600 }).map((_, i) => i) as i}
 		{@const centerX = 400}
 		{@const centerY = 400}
 
-		{@const currnetDate = CorneaDate.from({ sunYear: now.sunYear, day: i })}
+		{@const currnetDate = CorneaDate.from({ sunYear: now.sunYear, day: i + 1 })}
 
 		{@const dayFiledHeight = 20}
 		{@const dayStartRadius = 200}
@@ -83,25 +173,34 @@
 		{@const x4 = centerX + ringStartRadius * Math.cos(semnetStartAngle + subsegmentEndAngle)}
 		{@const y4 = centerY + ringStartRadius * Math.sin(semnetStartAngle + subsegmentEndAngle)}
 
-		<path
-			class="dayfield"
-			class:selected={currnetDate.daysSinceEpoch == now.daysSinceEpoch}
-			d="M {x1} {y1} L {x2} {y2} L {x3} {y3} L {x4} {y4} Z"
+		{@const moonYearStart = dayStartRadius - 100}
+		{@const moonYearEnd = moonYearStart + 60}
+
+		<g
+			class="daybox"
 			onclick={() => (selectedDay = currnetDate.daysSinceEpoch)}
-			stroke-width="0.5"
-		/>
-		<!-- Text in the middel and tilt it acordenly -->
-		<text
-			font-size="5"
-			text-anchor="middle"
-			alignment-baseline="middle"
-			x={centerX + middleRadius * Math.cos(middleAngle)}
-			y={centerY + middleRadius * Math.sin(middleAngle)}
-			transform="rotate({(middleAngle * 180) / Math.PI + 90} {centerX +
-				middleRadius * Math.cos(middleAngle)} {centerY + middleRadius * Math.sin(middleAngle)})"
+			class:hasData={daysWithData.includes(currnetDate.daysSinceEpoch)}
 		>
-			{currnetDate.day}
-		</text>
+			<path
+				class="dayfield"
+				class:selected={currnetDate.daysSinceEpoch == now.daysSinceEpoch}
+				d="M {x1} {y1} L {x2} {y2} L {x3} {y3} L {x4} {y4} Z"
+				stroke-width="0.5"
+			/>
+			<!-- Text in the middel and tilt it acordenly -->
+			<text
+				class="daytext"
+				font-size="5"
+				text-anchor="middle"
+				alignment-baseline="middle"
+				x={centerX + middleRadius * Math.cos(middleAngle)}
+				y={centerY + middleRadius * Math.sin(middleAngle)}
+				transform="rotate({(middleAngle * 180) / Math.PI + 90} {centerX +
+					middleRadius * Math.cos(middleAngle)} {centerY + middleRadius * Math.sin(middleAngle)})"
+			>
+				{currnetDate.day}
+			</text>
+		</g>
 
 		{#if currnetDate.day <= 6}
 			{@const textRadius = outerRingStart + 10}
@@ -127,6 +226,9 @@
 				font-size="8"
 				text-anchor="start"
 				alignment-baseline="middle"
+				class:selected={currnetDate.dayOfWeek == now.dayOfWeek &&
+					currnetDate.month == now.month &&
+					currnetDate.moonYear == now.moonYear}
 				x={centerX + textRadius * Math.cos(middleAngle)}
 				y={centerY + textRadius * Math.sin(middleAngle)}
 				transform="rotate({(middleAngle * 180) / Math.PI} {centerX +
@@ -143,16 +245,15 @@
 
 			{@const outerX1 = centerX + textRadius * Math.cos(semnetStartAngle)}
 			{@const outerY1 = centerY + textRadius * Math.sin(semnetStartAngle)}
-			{@const outerX2 = centerX + textRadius * Math.cos(semnetStartAngle + Math.PI / 2)}
-			{@const outerY2 = centerY + textRadius * Math.sin(semnetStartAngle + Math.PI / 2)}
+			{@const outerX2 = centerX + textRadius * Math.cos(semnetStartAngle + Math.PI / 10)}
+			{@const outerY2 = centerY + textRadius * Math.sin(semnetStartAngle + Math.PI / 10)}
 
 			<!-- <circle id="curve{i}" cx={centerX} cy={centerY} r={moonYearStart} fill="none" stroke="red" /> -->
 
 			<path
 				id="curve2{i}"
 				d="M {outerX1} {outerY1} A {textRadius} {textRadius},  0, 0, 1, {outerX2} {outerY2}"
-				stroke="transparent"
-				fill="transparent"
+				class="none"
 			/>
 
 			{@const lineX1 = centerX + outerRingEnd * Math.cos(semnetStartAngle)}
@@ -160,7 +261,7 @@
 			{@const lineX2 = centerX + moonYearStart * Math.cos(semnetStartAngle)}
 			{@const lineY2 = centerY + moonYearStart * Math.sin(semnetStartAngle)}
 
-			<path d="M {lineX1} {lineY1} L {lineX2} {lineY2}" />
+			<path d="M {lineX1} {lineY1} L {lineX2} {lineY2}" stroke-width="1" />
 
 			<!-- <path d="M {outerX1} {outerY1} L {outerX2} {outerY2}"  /> -->
 
@@ -170,6 +271,8 @@
 					startOffset="50%"
 					text-anchor="middle"
 					alignment-baseline="middle"
+					font-size="16"
+					class:selected={currnetDate.month == now.month && currnetDate.moonYear == now.moonYear}
 				>
 					{currnetDate.monthName}
 				</textPath>
@@ -178,8 +281,6 @@
 
 		<!-- moon yeras quarters-->
 		{#if currnetDate.month == 1 && currnetDate.day == 1}
-			{@const moonYearStart = dayStartRadius - 100}
-			{@const moonYearEnd = moonYearStart + 60}
 			{@const textRadius = (moonYearEnd - moonYearStart) / 2 + moonYearStart}
 
 			{@const outerX1 = centerX + textRadius * Math.cos(semnetStartAngle)}
@@ -188,8 +289,14 @@
 			{@const outerY2 = centerY + textRadius * Math.sin(semnetStartAngle + Math.PI / 2)}
 
 			{#if currnetDate.moonYear == 1}
-				<circle cx={centerX} cy={centerY} r={moonYearStart} fill="none" stroke="red" />
-				<circle cx={centerX} cy={centerY} r={moonYearEnd} fill="none" stroke="red" />
+				<circle
+					cx={centerX}
+					cy={centerY}
+					r={moonYearStart}
+					fill="none"
+					stroke="var(--pico-color)"
+				/>
+				<circle cx={centerX} cy={centerY} r={moonYearEnd} fill="none" stroke="var(--pico-color)" />
 			{/if}
 
 			<!-- <circle id="curve{i}" cx={centerX} cy={centerY} r={moonYearStart} fill="none" stroke="red" /> -->
@@ -197,8 +304,7 @@
 			<path
 				id="curve{i}"
 				d="M {outerX1} {outerY1} A {textRadius} {textRadius},  0, 0, 1, {outerX2} {outerY2}"
-				stroke="transparent"
-				fill="transparent"
+				class="none"
 			/>
 
 			<!-- <path d="M {outerX1} {outerY1} L {outerX2} {outerY2}"  /> -->
@@ -210,6 +316,7 @@
 					text-anchor="middle"
 					alignment-baseline="middle"
 					font-size="36"
+					class:selected={currnetDate.moonYear == now.moonYear}
 				>
 					{currnetDate.moonYearName}
 				</textPath>
@@ -218,57 +325,88 @@
 
 		{#if i == 599}
 			<path
-				d="M {centerX} {centerY + outerRingEnd} L {centerX} {centerY - outerRingEnd}"
+				d="M {centerX} {centerY + outerRingEnd} L {centerX} {centerY + moonYearStart}"
 				stroke-width="2"
 			/>
 			<path
-				d="M {centerX + outerRingEnd} {centerY} L {centerX - outerRingEnd} {centerY}"
+				d="M {centerX} {centerY - outerRingEnd} L {centerX} {centerY - moonYearStart}"
 				stroke-width="2"
 			/>
+			<path
+				d="M {centerX + outerRingEnd} {centerY} L {centerX + moonYearStart} {centerY}"
+				stroke-width="2"
+			/>
+			<path
+				d="M {centerX - outerRingEnd} {centerY} L {centerX - moonYearStart} {centerY}"
+				stroke-width="2"
+			/>
+
+			<text x={centerX} y={centerY} text-anchor="middle" alignment-baseline="middle" font-size="30">
+				<tspan x={centerX} dy="-0.5em">Sonnen</tspan>
+				<tspan x={centerX} dy="1em"> {currnetDate.sunYear}</tspan>
+				<tspan x={centerX} dy="1em">Jahr</tspan>
+			</text>
 		{/if}
 	{/each}
 </svg>
 
-<table>
-	<thead>
-		<tr>
-			<th>Day</th>
-			<th>Day of the week</th>
-			<th>Month</th>
-			<th>Moon year</th>
-			<th>Sun year</th>
-		</tr>
-	</thead>
-	<tbody>
-		{#each Array.from( { length: numberOfDays } ).map((_, d) => d + day - Math.floor(numberOfDays / 2)) as d}
-			{@const date = CorneaDate.fromEpoch(d)}
-			<tr>
-				<td>{date.day}</td>
-				<td>{date.dayOfWeekName} ({date.dayOfWeek})</td>
-				<td>{date.monthName} ({date.month})</td>
-				<td>{date.moonYearName} ({date.moonYear})</td>
-				<td>{date.sunYear}</td>
-			</tr>
-		{/each}
-	</tbody>
-</table>
-
+<!-- {/if} -->
 <style lang="scss">
-	svg {
+	svg path {
 		stroke: var(--pico-color);
+		z-index: 1;
 	}
+	svg .none {
+		stroke: none;
+		fill: none;
+	}
+
 	.dayfield {
 		fill: transparent;
+	}
+	.daytext {
+		fill: var(--pico-color);
+	}
+	g.daybox {
 		cursor: pointer;
 	}
-	.dayfield:hover {
-		fill: lightblue;
+	g.daybox:hover > .dayfield {
+		fill: var(--pico-secondary-hover-background);
 	}
 
 	.dayfield.selected {
-		fill: lightskyblue;
+		fill: var(--pico-primary-background);
 	}
 	.dayfield.selected:hover {
-		fill: lightsteelblue;
+		fill: var(--pico-primary-hover-background);
+	}
+	.selected {
+		stroke: var(--pico-primary);
+	}
+	textPath.selected,
+	text.selected {
+		stroke: none;
+		fill: var(--pico-primary);
+	}
+
+	g.hasData {
+		path {
+			stroke-width: 2;
+			stroke-dasharray: 3, 1;
+			z-index: 100;
+			stroke: var(--pico-ins-color);
+		}
+	}
+
+	aside {
+		position: fixed;
+		top: 0;
+		left: 0;
+	}
+	h1 {
+		position: fixed;
+		top: 0;
+		right: 0;
+		margin: var(--pico-spacing);
 	}
 </style>

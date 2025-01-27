@@ -40,6 +40,7 @@
 		"@trpc/server": "^10.45.2",
 		"quill": "^2.0.3",
 		"quill-cursors": "^4.0.4",
+		"quill-delta": "^5.1.0",
 		"svelte-quill": "^1.2.0",
 		"trpc-sveltekit": "^3.6.2",
 		"ws": "^8.18.0",

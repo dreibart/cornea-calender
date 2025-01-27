@@ -14,11 +14,15 @@ export class CorneaDate {
 
 
     public static fromEpoch(dayInEpcoh: number) {
-        return new CorneaDate(dayInEpcoh -1);
+        return new CorneaDate(dayInEpcoh);
     }
 
     public static from({sunYear, moonYear, month, day} : {sunYear?: number, moonYear?: number, month?: number, day?: number}) {
-        return new CorneaDate((sunYear??0)*600 + (moonYear??0)*150 + (month??0)*30 + (day??0));
+        const dayPart = day?day - 1:0;
+        const monthPart = month?(month-1)*30:0;
+        const moonYearPart = moonYear?(moonYear-1)*150:0;
+        const sunYearPart = sunYear?(sunYear)*600:0;
+        return new CorneaDate(dayPart+monthPart+moonYearPart+sunYearPart);
     }
 
     constructor(daysSinceEpoch: number) {
@@ -26,7 +30,7 @@ export class CorneaDate {
     }
 
     public get daysSinceEpoch() {
-        return this._daysSinceEpoch+1;
+        return this._daysSinceEpoch;
     }
 
     public get day() {
